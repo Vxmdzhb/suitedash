@@ -621,9 +621,8 @@ mod net_impl {
     mod tests {
         use super::{log_token, request_line, MAX_REQUEST_HEAD};
 
-        /// A bare `\n` in the target used to survive `request_line` (which split
-        /// on `"\r\n"` only) and reach `eprintln!`, where it forged a second,
-        /// entirely attacker-written line in the request log.
+        /// A bare `\n` in the target must not reach the request log, where it would
+        /// forge a second log line.
         #[test]
         fn a_bare_newline_cannot_forge_a_second_log_line() {
             // The newline sits inside the target token itself (no space around

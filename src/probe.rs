@@ -74,12 +74,12 @@ pub const HEALTH_FALLBACKS: [&str; 7] = [
     "/",
 ];
 
-/// The liveness paths to try, in order: the configured `health_path` first, then
-/// [`HEALTH_FALLBACKS`], with empties dropped and duplicates removed (Python
+/// The liveness paths to try, in order: the configured `health_path` first,
+/// then [`HEALTH_FALLBACKS`], without empties or duplicates (Python
 /// `_probe_health`'s `candidates` list).
 ///
-/// Pure, so the fallback *order* — the part of the tolerance contract a config
-/// change can silently break — is unit-testable without a socket.
+/// Pure, so the fallback order, which a config change could quietly break,
+/// can be tested without a socket.
 #[must_use]
 pub fn health_candidates(cfg: &ServiceConfig) -> Vec<String> {
     let mut out: Vec<String> = Vec::with_capacity(HEALTH_FALLBACKS.len() + 1);

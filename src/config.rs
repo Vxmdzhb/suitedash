@@ -1,26 +1,23 @@
-//! The list of services to poll, the top-level server settings, and the
-//! read-only TOML config loader — a port of the Python `suitedash.config`.
+//! The services to poll, the server settings, and the read-only TOML config
+//! loader. A port of the Python `suitedash.config`.
 //!
-//! Everything has sensible defaults for the standard astrx-suite localhost
-//! ports, so `suitedash` runs with no arguments. A small TOML file (CPython
-//! parses it with the standard-library `tomllib`; here with the bundled
-//! [`toml`] subset parser below) or CLI flags can override any of it. A service
-//! entry is just `name`/`base_url` plus which paths to probe and which metric
-//! keys to surface on its card.
+//! Everything defaults to the suite's standard localhost ports, so `suitedash`
+//! runs with no arguments. A small TOML file (Python uses `tomllib`; here the
+//! bundled [`toml`] subset parser below) or CLI flags can override any of it.
+//! A service is just `name`/`base_url`, the paths to probe and the metric keys
+//! to show on its card.
 //!
 //! Loading is **bounded and validating**: rule counts, history sizes and
-//! debounce windows are clamped, TOML nesting is capped at [`toml::MAX_DEPTH`],
-//! every `[[alert]]` gets a unique id (an auto-assigned id can never collide
-//! with an explicit one — a collision would merge two rules in the engine and
-//! silently drop an alert), every `[[service]]` name is unique (a duplicate
-//! would silently drop a service from every sweep), probe paths cannot smuggle a
-//! second request into the request line, and a malformed entry is a hard
+//! debounce windows are clamped, TOML nesting is capped at
+//! [`toml::MAX_DEPTH`], every `[[alert]]` gets a unique id (an automatic id
+//! never collides with an explicit one, or two rules would merge and an alert
+//! would disappear), every `[[service]]` name is unique, probe paths can't
+//! smuggle a second request into the request line, and a malformed entry is a
 //! [`ConfigError`] rather than a half-applied config.
 //!
-//! Two of those are **deliberate divergences from the Python reference**, which
-//! accepted both inputs: the nesting cap (a bomb aborted the process here where
-//! CPython raised a catchable `RecursionError` — see [`toml::MAX_DEPTH`]) and the
-//! duplicate-name rejection (see the note in [`parse_config`]).
+//! Two of these differ from the Python version on purpose, which accepted both
+//! inputs: the nesting cap (see [`toml::MAX_DEPTH`]) and rejecting duplicate
+//! service names (see [`parse_config`]).
 
 use crate::pycompat;
 use std::fmt;
@@ -115,13 +112,13 @@ impl ServiceConfig {
 ///
 /// Two kinds:
 ///
-/// * `kind = "metric"` — fires when `metric <op> threshold` holds for
-///   `for_polls` consecutive sweeps (debounced) and clears when it no longer
-///   holds. Only the metric keys *surfaced* on a service are visible to rules.
-/// * `kind = "down"` — fires when the service's last probe was DOWN.
+/// * `kind = "metric"` fires when `metric <op> threshold` holds for
+///   `for_polls` consecutive sweeps (debounced), and clears when it stops
+///   holding. Rules only see the metric keys a service *surfaces*.
+/// * `kind = "down"` fires when the service's last probe was DOWN.
 ///
-/// `service` is a service name, or `"*"` (the default) to apply the rule to
-/// every polled service. `op` is one of [`ALLOWED_OPS`].
+/// `service` is a service name, or `"*"` (the default) for every polled
+/// service. `op` is one of [`ALLOWED_OPS`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct AlertRule {
     /// Unique rule id (the engine keys per-`(service, rule id)` state on it).
@@ -1074,9 +1071,9 @@ fn as_service(entry: &Toml) -> Result<ServiceConfig, ConfigError> {
 
 /// Build one [`AlertRule`] from an `[[alert]]` table (validated).
 ///
-/// `rid` is the already-resolved, guaranteed-unique rule id (see
-/// `resolve_rule_ids`); the engine keys per-`(service, rule id)` state on it, so
-/// a collision would silently merge two rules into one.
+/// `rid` is the resolved, unique rule id (see `resolve_rule_ids`). The engine
+/// keys its per-`(service, rule id)` state on it, so a collision would merge
+/// two rules into one.
 fn as_rule(entry: &Toml, rid: &str) -> Result<AlertRule, ConfigError> {
     let rid_repr = Toml::Str(rid.to_string()).py_repr();
     let kind_raw = entry.get("kind").map_or_else(
@@ -1164,13 +1161,11 @@ fn as_rule(entry: &Toml, rid: &str) -> Result<AlertRule, ConfigError> {
     })
 }
 
-/// Assign a unique id to every `[[alert]]` entry.
+/// Give every `[[alert]]` entry a unique id.
 ///
-/// Explicit ids must be unique (a duplicate is a hard error). Entries without an
-/// id get `rule-<n>` chosen from a set that already contains every explicit id
-/// AND every id assigned so far, so an auto-id can never collide with an
-/// explicit one — a collision would make the engine merge two rules into one and
-/// silently drop an alert.
+/// Explicit ids must be unique (a duplicate is an error). Entries without one
+/// get `rule-<n>`, chosen to avoid every explicit id and every id assigned so
+/// far, so an automatic id can never merge two rules into one.
 fn resolve_rule_ids(entries: &[Toml]) -> Result<Vec<String>, ConfigError> {
     let mut explicit: Vec<String> = Vec::new();
     for e in entries {
@@ -1272,16 +1267,12 @@ pub fn parse_config(text: &str, base: Option<Config>) -> Result<Config, ConfigEr
         };
         let services: Vec<ServiceConfig> =
             items.iter().map(as_service).collect::<Result<_, _>>()?;
-        // The service NAME is the primary key of the whole pipeline: `poll_all`
-        // keys its sweep by it, and so do the alert engine, the history rings and
-        // the `/api/status` payload. Two `[[service]]` blocks both named "gitweb"
-        // therefore left `cfg.services.len() == 2` but a sweep of ONE result, and
-        // `/api/status` reported `"total": 1` — the second block silently
-        // overwrote the first, so one of the two machines was never probed and
-        // could be down for weeks without the dashboard ever saying so. That is
-        // failing *open* in a monitoring tool, so it is a hard error here even
-        // though the Python reference accepted it (a deliberate, documented
-        // divergence: the reference had the same bug).
+        // The service name is the key of the whole pipeline: `poll_all` keys its
+        // sweep by it, and so do the alert engine, the history rings and
+        // `/api/status`. Two `[[service]]` blocks with the same name would mean one
+        // machine is never probed, and could be down for weeks without the dashboard
+        // saying so. A monitoring tool must not fail open, so this is an error, even
+        // though the Python version accepted it.
         let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
         for s in &services {
             if !seen.insert(s.name.as_str()) {
@@ -1300,8 +1291,8 @@ pub fn parse_config(text: &str, base: Option<Config>) -> Result<Config, ConfigEr
                 "[[alert]] must be an array of tables".to_string(),
             ));
         };
-        // Bounded: never load more than MAX_RULES rules from a file. Ids are
-        // resolved to be unique so no two rules can silently collapse in the engine.
+        // Never load more than MAX_RULES rules from a file. Ids are made unique so
+        // no two rules collapse into one in the engine.
         let bounded = &items[..items.len().min(MAX_RULES)];
         cfg.alert_rules = build_rules(bounded)?;
     }
@@ -1603,10 +1594,9 @@ mod tests {
         assert!(toml::parse("a = [[1, 2], [3]]\nb = { x = { y = 1 } }\n").is_ok());
     }
 
-    /// Two `[[service]]` blocks with the same name used to leave
-    /// `cfg.services.len() == 2` while a sweep produced ONE result (both keyed by
-    /// the same name), so `/api/status` said `"total": 1` and the second machine
-    /// was never probed — an outage on it could never be reported.
+    /// Two `[[service]]` blocks with the same name must be refused: otherwise a
+    /// sweep produces one result for both, and the second machine is never
+    /// probed.
     #[test]
     fn duplicate_service_names_are_rejected() {
         let err = load(concat!(

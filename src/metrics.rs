@@ -580,10 +580,10 @@ mod tests {
         assert!(parse_metrics(b"", "text/plain").is_empty());
     }
 
-    /// The measured attack: six lines whose NAME is 150 000 bytes (a 900 KB
-    /// body, inside the 1 MiB fetch cap), rotated every sweep. Each name used to
-    /// become a permanent history ring key and was deep-copied into every
-    /// snapshot — 36.6 MiB of key strings after 64 sweeps.
+    /// The measured attack: six lines whose name is 150 000 bytes (a 900 KB body,
+    /// inside the 1 MiB fetch cap), changing every sweep. Without the name limit
+    /// each would become a permanent history key: 36.6 MiB of keys after 64
+    /// sweeps.
     #[test]
     fn hostile_metric_names_are_capped_by_both_parsers() {
         let huge = "a".repeat(150_000);

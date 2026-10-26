@@ -1,23 +1,22 @@
-//! Threshold + down-detection alerting evaluated once per poll sweep — a port of
-//! the Python `suitedash.alerts`.
+//! Threshold and down-detection alerting, evaluated once per poll sweep. A
+//! port of the Python `suitedash.alerts`.
 //!
-//! The engine is a small, *stateful* object: it is handed each poll's results and
-//! advances a per-`(service, rule)` [`AlertState`] — a breach *streak*, a
-//! firing/ok flag, when the current status began, and the last observed value. A
-//! metric rule fires only after its condition holds for `for_polls` consecutive
-//! sweeps (debounced), and clears the moment the condition no longer holds. A
+//! The engine is a small stateful object: it gets each poll's results and
+//! advances a per-`(service, rule)` [`AlertState`]: a breach streak, a
+//! firing/ok flag, when the current status began, and the last value seen. A
+//! metric rule fires only after its condition holds for `for_polls`
+//! consecutive sweeps (debounced) and clears as soon as it stops holding. A
 //! `down` rule fires when a service's last probe was DOWN.
 //!
-//! Everything is bounded: the rule list is capped by the config loader, the
-//! number of live states is naturally bounded by `rules × services` (states for
-//! services no longer polled are pruned each sweep), and the transition event log
-//! is a fixed-length ring.
+//! Everything is bounded: the config loader caps the rule list, live states
+//! are at most `rules × services` (states for services no longer polled are
+//! pruned every sweep), and the transition log is a fixed-length ring.
 //!
-//! The engine never panics on a hostile value — a bad comparison degrades to
-//! "not breaching". Where Python injects a `clock` callable, [`AlertEngine::update`]
-//! takes the timestamp as an argument, keeping the whole module pure and its
-//! goldens deterministic. Cross-checked byte-identical to Python by
-//! `tests/xcheck_alerts.rs`.
+//! A hostile value never panics the engine; a bad comparison just counts as
+//! "not breaching". Where Python injects a `clock` callable,
+//! [`AlertEngine::update`] takes the timestamp as an argument, which keeps the
+//! module pure and its goldens deterministic. Cross-checked byte for byte
+//! against Python by `tests/xcheck_alerts.rs`.
 
 use crate::config::AlertRule;
 use crate::metrics::Results;

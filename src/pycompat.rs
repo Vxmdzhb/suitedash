@@ -1,25 +1,26 @@
-//! CPython-compatible primitives — the byte-identity substrate of the port.
+//! CPython-compatible primitives: what byte-identity with the Python version
+//! rests on.
 //!
-//! Every rendered number, stripped string and split line in `suitedash` has to
-//! come out byte-identical to the Python reference, and Rust's stdlib differs
-//! from CPython in small ways that would silently corrupt a golden:
+//! Every rendered number, stripped string and split line in `suitedash` must
+//! match the Python reference byte for byte, and Rust's standard library
+//! differs from CPython in small ways:
 //!
 //! * `str.strip()`/`str.split()` and `re`'s `\s` treat the four C0 separators
-//!   `\x1c`–`\x1f` as whitespace; [`char::is_whitespace`] does not.
-//! * `str.splitlines()` breaks on `\v`, `\f`, `\x1c`–`\x1e`, `\x85`, `\u{2028}`
-//!   and `\u{2029}` as well as `\n`/`\r`/`\r\n`.
-//! * `float(s)` accepts `_` digit separators (`float("1_000") == 1000.0`), which
-//!   `str::parse::<f64>()` rejects — and the exporter's canonicalisation of
+//!   `\x1c`–`\x1f` as whitespace; [`char::is_whitespace`] doesn't.
+//! * `str.splitlines()` also breaks on `\v`, `\f`, `\x1c`–`\x1e`, `\x85`,
+//!   `\u{2028}` and `\u{2029}`, not just `\n`/`\r`/`\r\n`.
+//! * `float(s)` accepts `_` digit separators (`float("1_000") == 1000.0`),
+//!   which `str::parse::<f64>()` rejects, and the exporter's handling of
 //!   `grouped 1_000` depends on it.
 //! * `repr(f)` switches to exponential notation outside `10**-4 ..= 10**16`
-//!   and always keeps a `.0`, where Rust's `{}` never uses an exponent.
+//!   and always keeps a `.0`; Rust's `{}` never uses an exponent.
 //! * `int(f)` is exact for every finite float, including the 309-digit
 //!   `int(1e300)`, where `f as i64` saturates.
 //!
-//! Everything here is `pub(crate)` — an implementation detail of the port, not
-//! part of the crate's API. The float formatters are cross-checked against
-//! CPython by the unit tests at the bottom of this file (goldens emitted by
-//! `tests/regen_goldens.py`, section `gen_pyfmt`).
+//! Everything here is `pub(crate)`: part of the port, not of the API. The
+//! float formatters are checked against CPython by the unit tests at the
+//! bottom of this file (goldens from `tests/regen_goldens.py`, section
+//! `gen_pyfmt`).
 
 /// Python's whitespace class (`str.strip()`, `str.split()`, `re`'s `\s`):
 /// Unicode `White_Space` plus the C0 separators `\x1c`–`\x1f`.

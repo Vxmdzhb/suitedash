@@ -142,16 +142,12 @@ async fn spawn_service(routes: &[(&str, Reply)], catch_all: Option<Reply>) -> Mo
     Mock { port, handle }
 }
 
-/// A base URL whose connect can only ever be refused.
+/// A base URL whose connect can only be refused.
 ///
-/// This used to scavenge a port: bind `127.0.0.1:0`, note what the kernel
-/// assigned, drop the listener, and hand out the number. That port is only
-/// free at the instant it is returned — the tests in this binary run in
-/// parallel and bind ephemeral ports of their own, so one of them can be given
-/// the port another just released, and then "nothing is listening" quietly
-/// becomes "something is". Port 0 removes the race instead of narrowing it:
-/// `bind(0)` means "assign me a port" and never yields 0 itself, so nothing
-/// can ever be listening there, and Linux refuses the connect immediately.
+/// Port 0: `bind(0)` means "assign me a port" and never yields 0 itself, so
+/// nothing can ever be listening there, and Linux refuses the connect at once.
+/// A port found by binding and releasing could be taken by a parallel test in
+/// between.
 const DEAD_PORT_URL: &str = "http://127.0.0.1:0";
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
@@ -349,14 +345,10 @@ async fn fetch_of_a_dead_port_is_refused_not_waited_on() {
     let err = fetch(DEAD_PORT_URL, "/health", Duration::from_secs(2))
         .await
         .expect_err("nothing is listening");
-    // The variant is the proof, and a better one than a stopwatch: had the
-    // fetch sat on the port until the two-second deadline, it would have come
-    // back `Timeout`. `Refused` can only mean the kernel answered the connect
-    // with RST. This used to also assert `elapsed() < 1s`, which said nothing
-    // the variant does not already say and failed on a loaded runner whenever
-    // the task was descheduled for a second. The test was called
-    // `…_refused_fast`; it never measured "fast" in any sense that survived
-    // the machine being busy, so it is now named for what it checks.
+    // The variant is the proof: had the fetch waited until the two-second
+    // deadline, it would have come back `Timeout`. `Refused` can only mean the
+    // kernel answered the connect with RST. (No stopwatch: timing assertions fail
+    // on busy runners.)
     assert_eq!(err, ProbeError::Refused);
     assert!(err.is_fatal());
 }
@@ -395,7 +387,8 @@ async fn a_smuggled_probe_path_never_reaches_the_wire() {
         );
         assert!(err.is_fatal());
     }
-    // A hostile base_url path lands in the same request line and is refused too.
+    // A hostile base_url path ends up in the same request line and is refused
+    // too.
     let err = fetch(
         &format!("{base}/x HTTP/1.1\r\nHost: attacker\r\n\r\nGET /admin"),
         "/health",
@@ -983,9 +976,9 @@ async fn a_slowloris_client_cannot_hold_a_connection_slot_open() {
         Arc::new(Dashboard::new(config)),
     )));
 
-    // The attack: open a request head and never terminate it, sending one more
-    // header every 3 s — comfortably inside the 10 s window that used to be
-    // restarted on every single read, so the lease renewed itself forever.
+    // The attack: open a request head and never finish it, sending another
+    // header every 3 s. A per-read timeout would be renewed by each one; the
+    // total deadline is not.
     let mut slow = TcpStream::connect(("127.0.0.1", port))
         .await
         .expect("slowloris connect");

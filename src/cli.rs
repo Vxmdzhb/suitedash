@@ -1,26 +1,23 @@
-//! The `suitedash` command-line entrypoint — a dependency-free port of the
-//! Python console script (`legacy-python/suitedash/suitedash/cli.py`).
+//! The `suitedash` command-line entrypoint, a dependency-free port of the
+//! Python console script.
 //!
-//! Runs with no arguments (the defaults poll the four astrx-suite services on
-//! their standard loopback ports). `--config` loads a TOML file; scalar flags
+//! Runs with no arguments (the defaults poll the suite's services on their
+//! standard loopback ports). `--config` loads a TOML file; single flags
 //! override individual settings; `--service name=url` retargets or adds a
-//! service inline; `--check` polls once, prints the `/api/status` JSON to stdout
-//! and exits (handy for cron / smoke tests without opening a socket), with a
-//! non-zero exit when anything is DOWN so it composes in shell pipelines.
+//! service; `--check` polls once, prints the `/api/status` JSON and exits
+//! (handy for cron and smoke tests, no socket opened), with a non-zero exit
+//! when anything is DOWN, so it works in shell pipelines.
 //!
-//! Like the Python CLI this is flag-only — there are no subcommands. Argument
-//! parsing is hand-rolled in the style of `crates/websearch/src/bin/websearch.rs`
-//! (no `clap`, no third-party crate), and the whole binary is gated behind the
-//! crate's `net` feature via the `[[bin]]` `required-features`, so the default
-//! `suitedash` build stays a pure, zero-dependency library.
+//! Like the Python CLI it has flags only, no subcommands. Argument parsing is
+//! hand-written like the other engines' (no `clap`, no third-party crate), and
+//! the binary needs the crate's `net` feature (`required-features` on the
+//! `[[bin]]`), so the default build stays a pure library with no dependencies.
 //!
-//! Exit codes match argparse plus the reference's `--check` contract: `0` success
+//! Exit codes match argparse plus the reference's `--check` rule: `0` success
 //! (or `--help`/`--version`), `1` a runtime failure or a DOWN service under
-//! `--check`, `2` a usage error. **Documented divergence:** an unreadable or
-//! invalid `--config` file is a clean `error: …` on stderr with exit `2`, where
-//! CPython lets the `ValueError`/`OSError` escape as a traceback (exit `1`); the
-//! `--version` string is this crate's version, not the retiring package's
-//! `1.0.0`.
+//! `--check`, `2` a usage error. **Differences:** an unreadable or invalid
+//! `--config` is a clean `error: …` with exit `2`, where CPython shows a
+//! traceback (exit `1`); `--version` prints this crate's version.
 use std::process::ExitCode;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -75,11 +72,9 @@ enum CliError {
 /// and exit codes — the point of routing them through one function rather than
 /// two copies of the parser that drift apart the first time a flag is added.
 pub fn run(args: impl Iterator<Item = String>) -> ExitCode {
-    // `--log-format` is handled before the subcommand parser so it works on
-    // every subcommand of every engine with one call site each, rather than
-    // being a flag an operator has to remember which subcommands happen to
-    // accept. It is removed from `argv`, so the parser below sees exactly the
-    // command line it saw before this flag existed.
+    // `--log-format` is handled before the subcommand parser, so it works on
+    // every subcommand, and it is removed from `argv`, so the parser below never
+    // sees it.
     let (log_format, argv) = match crawlcore::logfmt::take_format_flag(args.collect()) {
         Ok(v) => v,
         Err(msg) => {

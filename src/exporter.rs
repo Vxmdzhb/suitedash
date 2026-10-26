@@ -522,13 +522,8 @@ pub fn render_federated_metrics(results: &Results) -> String {
 pub const PREFIX: &str = "suitedash";
 
 /// This process's own request counters, shared by the accept loop and
-/// `/metrics`.
-///
-/// suitedash's `/metrics` used to be *entirely* federated: it reported on the
-/// services it polls and said nothing about itself beyond `suitedash_up 1`. When
-/// the dashboard is the thing that is slow or erroring — which is what an
-/// operator suspects the moment every card goes red at once — there was no
-/// number anywhere to confirm it or rule it out.
+/// `/metrics`, so when the dashboard itself is slow or failing (likely when
+/// every card turns red at once) there are numbers to confirm or rule it out.
 #[must_use]
 pub fn registry() -> &'static crawlcore::metrics::Requests {
     static REG: std::sync::OnceLock<crawlcore::metrics::Requests> = std::sync::OnceLock::new();

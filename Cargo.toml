@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
 license = "MIT"
-repository = "https://github.com/hydrastro/astrx"
+repository = "https://github.com/Vxmdzhb/suitedash"
 # Not published to crates.io, and the declaration is load-bearing rather than
-# decorative: every engine depends on crawlcore as `{ path = "../crawlcore" }`,
+# decorative: the suite's crates depend on each other through their git repositories,
 # and cargo-deny counts a versionless path dependency as a wildcard unless the
 # crate says it is unpublishable — because crates.io would reject a path
 # dependency anyway. Saying so here is also the only thing that stops a stray
@@ -17,7 +17,7 @@ description = "No-JS ops/status dashboard for the astrx-suite: tolerant bounded 
 [dependencies]
 # First-party shared library (hashing, INFLATE, urlparse, json). Not a
 # third-party dependency — crawlcore is itself stdlib-only.
-crawlcore = { path = "../crawlcore" }
+crawlcore = { git = "https://github.com/Vxmdzhb/crawlcore", branch = "main", version = "0.1" }
 # The polling + serving tier lives behind the opt-in `net`/`rand` features and
 # pulls in only the two vetted deps the rest of the suite uses. Declared here
 # (not via `[workspace.dependencies]`) so the manifest parses on pre-1.64 Cargo
